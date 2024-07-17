@@ -1,5 +1,6 @@
 // ./src/controller/auth.ts
 require('dotenv').config();
+import jwt, { Secret } from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 const crypto = require("crypto-js");
 import db from "../utils/db";
@@ -88,3 +89,62 @@ export const Login = async (
         return res.status(500).send("Internal server error");
     }
 }
+
+export const refreshToken = async (req: any, res: Response) => {
+    try {
+      console.log("refresh token work");
+      const username = req.user.username;
+      let newToken;
+      const oldUser = await db.myUser.findUnique({
+        where: {
+          username: req.user.username,
+        },
+      });
+      const oldRefreshToken = oldUser?.refreshtoken;
+      const refreshTokenFromBody = req.body.refreshtoken;
+  
+      // Check if refresh token in the request body matches the one in the database
+      console.log("Old Refresh Token = " + oldRefreshToken);
+      console.log("refresh token from request = " + refreshTokenFromBody);
+      if (oldRefreshToken?.toString() !== refreshTokenFromBody.toString()) {
+        console.log("not same refreshtoken");
+        return res.sendStatus(401);
+      }
+      // Verify the validity of the refresh token
+      const isValidRefreshToken = jwt.verify(
+        String(oldRefreshToken),
+        process.env.REFRESH_TOKEN_SECRET as Secret
+      ) as jwt.JwtPayload;
+  
+      if (!isValidRefreshToken) {
+        return res.sendStatus(401);
+      }
+  
+      if (oldUser) {
+        const token = generateTokens(oldUser);
+        newToken = token;
+      }
+  
+      console.log("New Refresh Token = " + newToken?.refreshToken);
+  
+      await db.myUser.update({
+        where: {
+          id: oldUser?.id,
+        },
+        data: {
+          refreshtoken: newToken?.refreshToken,
+        },
+      });
+  
+      const user = {
+        username: oldUser?.username,
+        accesstoken: newToken?.accessToken,
+        refreshtoken: newToken?.refreshToken,
+      };
+  
+      return res.status(201).json(user);
+    } catch (err) {
+      console.log(err);
+      return res.status(500).send("Internal server error");
+    }
+  };

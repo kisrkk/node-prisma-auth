@@ -12,9 +12,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Login = exports.Register = exports.getAllUser = void 0;
+exports.refreshToken = exports.Login = exports.Register = exports.getAllUser = void 0;
 // ./src/controller/auth.ts
 require('dotenv').config();
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const crypto = require("crypto-js");
 const db_1 = __importDefault(require("../utils/db"));
 const generateToken_1 = require("../utils/generateToken");
@@ -83,3 +84,53 @@ const Login = (req, res, next) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.Login = Login;
+const refreshToken = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        console.log("refresh token work");
+        const username = req.user.username;
+        let newToken;
+        const oldUser = yield db_1.default.myUser.findUnique({
+            where: {
+                username: req.user.username,
+            },
+        });
+        const oldRefreshToken = oldUser === null || oldUser === void 0 ? void 0 : oldUser.refreshtoken;
+        const refreshTokenFromBody = req.body.refreshtoken;
+        // Check if refresh token in the request body matches the one in the database
+        console.log("Old Refresh Token = " + oldRefreshToken);
+        console.log("refresh token from request = " + refreshTokenFromBody);
+        if ((oldRefreshToken === null || oldRefreshToken === void 0 ? void 0 : oldRefreshToken.toString()) !== refreshTokenFromBody.toString()) {
+            console.log("not same refreshtoken");
+            return res.sendStatus(401);
+        }
+        // Verify the validity of the refresh token
+        const isValidRefreshToken = jsonwebtoken_1.default.verify(String(oldRefreshToken), process.env.REFRESH_TOKEN_SECRET);
+        if (!isValidRefreshToken) {
+            return res.sendStatus(401);
+        }
+        if (oldUser) {
+            const token = (0, generateToken_1.generateTokens)(oldUser);
+            newToken = token;
+        }
+        console.log("New Refresh Token = " + (newToken === null || newToken === void 0 ? void 0 : newToken.refreshToken));
+        yield db_1.default.myUser.update({
+            where: {
+                id: oldUser === null || oldUser === void 0 ? void 0 : oldUser.id,
+            },
+            data: {
+                refreshtoken: newToken === null || newToken === void 0 ? void 0 : newToken.refreshToken,
+            },
+        });
+        const user = {
+            username: oldUser === null || oldUser === void 0 ? void 0 : oldUser.username,
+            accesstoken: newToken === null || newToken === void 0 ? void 0 : newToken.accessToken,
+            refreshtoken: newToken === null || newToken === void 0 ? void 0 : newToken.refreshToken,
+        };
+        return res.status(201).json(user);
+    }
+    catch (err) {
+        console.log(err);
+        return res.status(500).send("Internal server error");
+    }
+});
+exports.refreshToken = refreshToken;

@@ -1,5 +1,5 @@
 {
-  "name": "epower-server-orm",
+  "name": "node-prisma-auth",
   "version": "1.0.0",
   "main": "app.ts",
   "scripts": {
